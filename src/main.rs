@@ -7,6 +7,14 @@ use image::{ImageBuffer, RgbImage};
 const WIDTH: u32 = 480;
 const HEIGHT: u32 = 480;
 
+
+//TODO - Multithreading
+//TODO - Sliding window + step :
+// mini = 44100*480*480
+// reste = Taille - Mini (neg si pas assez, pos si assez)
+// step = 44100 + reste/(480*480 -1)
+//TODO - file name as arg + output name 
+
 fn main() {
     let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
 
