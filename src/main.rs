@@ -2,22 +2,29 @@ use hound;
 use num::complex::Complex;
 use rustfft::FftPlanner;
 
+use image::{ImageBuffer, RgbImage};
+
+const WIDTH: u32 = 480;
+const HEIGHT: u32 = 480;
+
 fn main() {
+    let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
+
     let mut reader = hound::WavReader::open("samples/darude.wav").unwrap();
 
     let spec = reader.spec();
     let lenth = reader.len() as usize;
     println!("{:?}, {:?}", spec, lenth);
 
-    let image_len = 480 * 480;
+    let image_len = WIDTH * HEIGHT;
 
-    let num_samples = lenth / image_len;
+    let num_samples = lenth / image_len as usize;
 
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(num_samples);
 
     let mut pixels: Vec<Vec<i32>> = vec![];
-    for _ in 0..image_len {
+    for pos in 0..image_len {
         // Slice num_samples bytes from the audio
         let mut signal = reader
             .samples::<i16>()
@@ -41,12 +48,20 @@ fn main() {
                 max[2] = (freq as i32, *amp);
             }
         }
+        *image.get_pixel_mut(pos % HEIGHT, pos / HEIGHT) = image::Rgb(
+            max.iter()
+                .map(|(f, _)| (f * 255 / (num_samples as i32 / 2)) as u8)
+                .collect::<Vec<u8>>()
+                .try_into()
+                .unwrap(),
+        );
 
-        pixels.push(vec![
-            max[0].0 * 255 / (num_samples as i32 / 2),
-            max[1].0 * 255 / (num_samples as i32 / 2),
-            max[2].0 * 255 / (num_samples as i32 / 2),
-        ])
+        // pixels.push(
+        //     max.iter()
+        //         .map(|(f, _)| f * 255 / (num_samples as i32 / 2))
+        //         .collect(),
+        // );
     }
-    println!("{:?}", pixels[18560]);
+
+    image.save("output.png").unwrap();
 }
