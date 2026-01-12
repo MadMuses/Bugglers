@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 audrey = "0.3.0"
 hound = "3.5.1"
+num = "0.4.3"
+rustfft = "6.4.1"
