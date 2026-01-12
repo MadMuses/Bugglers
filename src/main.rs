@@ -23,7 +23,6 @@ fn main() {
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(num_samples);
 
-    let mut pixels: Vec<Vec<i32>> = vec![];
     for pos in 0..image_len {
         // Slice num_samples bytes from the audio
         let mut signal = reader
@@ -41,8 +40,11 @@ fn main() {
             vec![(0, amplitudes[0]), (0, amplitudes[0]), (0, amplitudes[0])];
         for (freq, amp) in amplitudes.iter().take(num_samples / 2).enumerate() {
             if *amp > max[0].1 {
+                max[2] = max[1];
+                max[1] = max[0];
                 max[0] = (freq as i32, *amp);
             } else if *amp > max[1].1 {
+                max[2] = max[1];
                 max[1] = (freq as i32, *amp);
             } else if *amp > max[2].1 {
                 max[2] = (freq as i32, *amp);
@@ -55,13 +57,7 @@ fn main() {
                 .try_into()
                 .unwrap(),
         );
-
-        // pixels.push(
-        //     max.iter()
-        //         .map(|(f, _)| f * 255 / (num_samples as i32 / 2))
-        //         .collect(),
-        // );
     }
 
-    image.save("output.png").unwrap();
+    image.save("output/output.png").unwrap();
 }
