@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-audrey = "0.3.0"
 hound = "3.5.1"
 image = "0.25.9"
 num = "0.4.3"
 rustfft = "6.4.1"
+plotters = "0.3"
