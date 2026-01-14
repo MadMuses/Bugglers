@@ -13,7 +13,7 @@ const HEIGHT: u32 = 480;
 // mini = 44100*480*480
 // reste = Taille - Mini (neg si pas assez, pos si assez)
 // step = 44100 + reste/(480*480 -1)
-//TODO - file name as arg + output name 
+
 
 fn main() {
     // Collect args
@@ -24,8 +24,11 @@ fn main() {
     };
     let file_path = &args[1];
 
-    let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
+    gen_image(file_path);    
+}
 
+fn gen_image(file_path: &String) {
+    let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
     let mut reader = hound::WavReader::open(file_path).unwrap();
 
     let spec = reader.spec();
@@ -65,7 +68,6 @@ fn main() {
     let outpath = "output/".to_owned() + file_path.split("/").last().expect("aled").split(".").next().unwrap() + ".png";
     image.save(outpath).unwrap();
 }
-
 
 fn get_colors_from_max(amplitudes: Vec<f32>, num_samples: usize) -> Vec<(i32, f32)>
 {
