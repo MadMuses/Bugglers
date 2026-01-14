@@ -2,6 +2,7 @@ use hound;
 use num::complex::Complex;
 use rustfft::FftPlanner;
 use std::env;
+use std::sync::atomic::AtomicUsize;
 use image::{ImageBuffer, RgbImage};
 
 
@@ -10,6 +11,8 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicBool;
+use std::thread::available_parallelism;
+
 
 const WIDTH: u32 = 480;
 const HEIGHT: u32 = 480;
@@ -27,6 +30,10 @@ const SAMPLE_RATE: u32 = 5;
 
 
 fn main() {
+
+    // Print available threads
+    let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
+
     // Collect args
     let args: Vec<String> = env::args().collect();
     
@@ -34,13 +41,11 @@ fn main() {
     if args.len() < 2 {
         panic!("File name is missing : \nTry cargo run file.txt")
     };
-    let file_path = Arc::new(args[1].clone());
-    let file_path_doe = file_path.clone();
+    let file_path = args[1].clone();
     
     // -- Common grounds -- //
 
     // Image elements
-    let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
     let image_len = WIDTH * HEIGHT;
 
     // Audio elements
@@ -49,35 +54,16 @@ fn main() {
 
     // -- Threading -- //
     let collecting= Arc::new(AtomicBool::new(true));
-    let collecting_arc1 = collecting.clone();
-    let collecting_arc2 = collecting.clone();
+    let collecting_doe = collecting.clone();
 
     let (tx, rx) = mpsc::channel();
 
 
-
     // -- Closures -- //
-    let pixel_maker = move || {
-        
-        // -- Go to each pixel of the image -- //
-        for pos in 0..image_len {
-
-            // Slice num_samples bytes from the audio
-            let signal = reader
-                .samples::<i16>()
-                .take(num_samples)
-                .map(|x| Complex::new(x.unwrap() as f32, 0f32))
-                .collect::<Vec<_>>();
-
-            let colors = do_fft(signal);
-            tx.send((pos,colors)).unwrap();
-        }
-        collecting_arc1.store(false, Ordering::Release);
-    };
-
     let image_maker = move || {
-        while collecting_arc2.load(Ordering::Acquire) {
-            let data = rx.recv().unwrap();
+        let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
+        while collecting_doe.load(Ordering::Acquire) {
+            let data: (u32, Vec<i32>) = rx.recv().unwrap();
 
             // Place the pixel in the image
             *image.get_pixel_mut(data.0 % HEIGHT, data.0 / HEIGHT) = image::Rgb(
@@ -90,18 +76,40 @@ fn main() {
         }
 
         // -- Generate image -- //
-        let outpath = "output/".to_owned() + file_path_doe.split("/").last().expect("aled").split(".").next().unwrap() + ".png";
+        let outpath = "output/".to_owned() + file_path.split("/").last().expect("aled").split(".").next().unwrap() + ".png";
         image.save(outpath).unwrap();
     };
 
 
-    // Baby thread
-    let baby = thread::spawn(pixel_maker);
+    // Baby threads
+    let mut burrow = Vec::new();    
+
+    for n in 0..available_parallelism().unwrap().get() {
+        let tx = tx.clone();
+        let collecting_bunbuns = collecting.clone();
+        let nb_threads_bunbun = nb_threads.clone();
+
+        burrow.push(thread::spawn(move || {
+            // -- Go to each pixel of the image -- //
+            for pos in n..(image_len as usize/nb_threads_bunbun.load(Ordering::Acquire)*n) {
+    
+                // Slice num_samples bytes from the audio
+                let signal = reader
+                    .samples::<i16>()
+                    .take(num_samples)
+                    .map(|x| Complex::new(x.unwrap() as f32, 0f32))
+                    .collect::<Vec<_>>();
+    
+                let colors = do_fft(signal);
+                tx.send((pos as u32,colors)).unwrap();
+            }
+            collecting_bunbuns.store(false, Ordering::Release);
+
+        }));
+    }
 
     // Doe thread
     let doe = thread::spawn(image_maker);
-
-    baby.join().unwrap();
     doe.join().unwrap();
 }
 
