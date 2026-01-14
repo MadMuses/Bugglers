@@ -14,4 +14,4 @@ For now, we have a script that open a .wav file, and save the sound in a buffer.
 
 - [ ] Multithreading to optimise the computation of each pixel RGB values
 
-- [ ] filename to use as argument of the script and parsing for the output name
+- [X] filename to use as argument of the script and parsing for the output name
