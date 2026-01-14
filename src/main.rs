@@ -62,8 +62,8 @@ fn main() {
                 .unwrap(),
         );
     }
-
-    image.save("output/output.png").unwrap();
+    let outpath = "output/".to_owned() + file_path.split("/").last().expect("aled").split(".").next().unwrap() + ".png";
+    image.save(outpath).unwrap();
 }
 
 
