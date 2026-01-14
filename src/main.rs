@@ -9,6 +9,10 @@ const HEIGHT: u32 = 480;
 
 
 //TODO - Multithreading
+// Un thread qui collecte les messages et les places dans l'image
+// Autant de thread de possible qui font les FFT
+
+
 //TODO - Sliding window + step :
 // mini = 44100*480*480
 // reste = Taille - Mini (neg si pas assez, pos si assez)
@@ -19,30 +23,31 @@ fn main() {
     // Collect args
     let args: Vec<String> = env::args().collect();
     
+    // Get file name from args
     if args.len() < 2 {
         panic!("File name is missing : \nTry cargo run file.txt")
     };
     let file_path = &args[1];
 
-    gen_image(file_path);    
-}
 
-fn gen_image(file_path: &String) {
+    // -- Common grounds -- //
+
+    // Image elements
     let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
-    let mut reader = hound::WavReader::open(file_path).unwrap();
-
-    let spec = reader.spec();
-    let lenth = reader.len() as usize;
-    println!("{:?}, {:?}", spec, lenth);
-
     let image_len = WIDTH * HEIGHT;
 
-    let num_samples = lenth / image_len as usize;
+    // Audio elements
+    let mut reader = hound::WavReader::open(file_path).unwrap();
+    let num_samples = reader.len() as usize / image_len as usize;
 
+    // FFT elements
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(num_samples);
 
+
+    // -- Go to each pixel of the image -- //
     for pos in 0..image_len {
+
         // Slice num_samples bytes from the audio
         let mut signal = reader
             .samples::<i16>()
@@ -57,6 +62,7 @@ fn gen_image(file_path: &String) {
         // Find the 3 frequencies peaks
         let colors: Vec<(i32, f32)> = get_colors_from_max(amplitudes,num_samples);
 
+        // Place the pixel in the image
         *image.get_pixel_mut(pos % HEIGHT, pos / HEIGHT) = image::Rgb(
             colors.iter()
                 .map(|(f, _)| (f * 255 / (num_samples as i32 / 2)) as u8)
@@ -65,9 +71,15 @@ fn gen_image(file_path: &String) {
                 .unwrap(),
         );
     }
+
+
+    // -- Generate image -- //
     let outpath = "output/".to_owned() + file_path.split("/").last().expect("aled").split(".").next().unwrap() + ".png";
     image.save(outpath).unwrap();
 }
+
+
+
 
 fn get_colors_from_max(amplitudes: Vec<f32>, num_samples: usize) -> Vec<(i32, f32)>
 {
