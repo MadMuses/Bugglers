@@ -1,7 +1,7 @@
 use hound;
 use num::complex::Complex;
 use rustfft::FftPlanner;
-
+use std::env;
 use image::{ImageBuffer, RgbImage};
 
 const WIDTH: u32 = 480;
@@ -16,9 +16,17 @@ const HEIGHT: u32 = 480;
 //TODO - file name as arg + output name 
 
 fn main() {
+    // Collect args
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() < 2 {
+        panic!("File name is missing : \nTry cargo run file.txt")
+    };
+    let file_path = &args[1];
+
     let mut image: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
 
-    let mut reader = hound::WavReader::open("samples/darude.wav").unwrap();
+    let mut reader = hound::WavReader::open(file_path).unwrap();
 
     let spec = reader.spec();
     let lenth = reader.len() as usize;
