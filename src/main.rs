@@ -1,5 +1,5 @@
 use hound;
-use image::{ImageBuffer, RgbImage};
+use image::{ImageBuffer, RgbImage, imageops};
 use num::complex::Complex;
 use rustfft::{Fft, FftPlanner};
 use std::env;
@@ -15,6 +15,8 @@ use std::thread;
 
 use std::thread::available_parallelism;
 
+const FINAL_WIDTH: u32 = 1024;
+const FINAL_HEIGHT: u32 = 1024;
 const WIDTH: usize = 480;
 const HEIGHT: usize = 480;
 const SAMPLE_RATE: usize = 40000;
@@ -96,6 +98,13 @@ fn main() {
             );
         }
 
+        image = imageops::resize(
+            &image,
+            FINAL_WIDTH,
+            FINAL_HEIGHT,
+            imageops::FilterType::Lanczos3,
+        );
+
         // -- Generate image -- //
         let outpath = "output/".to_owned()
             + file_path
@@ -105,7 +114,12 @@ fn main() {
                 .split(".")
                 .next()
                 .unwrap()
+            + "_"
+            + WIDTH.to_string().as_str()
+            + "_"
+            + HEIGHT.to_string().as_str()
             + ".png";
+
         image.save(outpath).unwrap();
 
         let elapsed = start.elapsed().as_secs();
@@ -180,6 +194,7 @@ fn get_colors_from_max(amplitudes: Vec<f32>) -> Vec<f32> {
             _ => {}
         }
     }
+
     max
 }
 
