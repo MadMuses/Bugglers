@@ -4,12 +4,13 @@ use num::complex::Complex;
 use rustfft::{Fft, FftPlanner};
 
 use std::{
-    thread, env,
-    io::{stdout, Write},
-    time::{Instant},
-    sync::{Arc,Mutex,mpsc},
-    sync::atomic::{AtomicUsize,Ordering},
-    thread::{available_parallelism}
+    env,
+    io::{Write, stdout},
+    sync::atomic::{AtomicUsize, Ordering},
+    sync::{Arc, Mutex, mpsc},
+    thread,
+    thread::available_parallelism,
+    time::Instant,
 };
 
 const FINAL_WIDTH: u32 = 1024;
@@ -22,17 +23,16 @@ const SAMPLE_RATE: usize = 40000;
 
 // }
 
-
 fn main() {
-    // Print available threads
-    // let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
-
-    // Collect args
+    // -- Arguments parsing -- //
     let args: Vec<String> = env::args().collect();
 
     // Get file name from args
     if args.len() < 2 {
-        panic!("File name is missing : \nTry cargo run {:?}","folder/file.txt")
+        panic!(
+            "File name is missing : \nTry cargo run {:?}",
+            "folder/file.txt"
+        )
     };
     let file_path = args[1].clone();
 
@@ -40,11 +40,10 @@ fn main() {
 }
 
 fn threading(file_path: String) {
-    // -- Common grounds -- //
+    // -- Initialisation -- //
 
-    // Get the signal buffer
+    // Signal buffer init
     let mut reader = hound::WavReader::open(file_path.clone()).unwrap();
-
     let length = reader.len() as usize;
     let signal = Arc::new(Mutex::new(
         reader
@@ -53,48 +52,44 @@ fn threading(file_path: String) {
             .collect::<Vec<_>>(),
     ));
 
-    // Image
+    // Image init
     let image_len = WIDTH * HEIGHT;
 
-    // FFT
+    // FFT init
     let mut planner = FftPlanner::new();
-    let fft: std::sync::Arc<dyn Fft<f32>> = planner.plan_fft_forward(SAMPLE_RATE);
+    let fft: Arc<dyn Fft<f32>> = planner.plan_fft_forward(SAMPLE_RATE);
 
-    // Compute the step for the sliding window
+    // Sliding window init
     let diff = length as f64 - SAMPLE_RATE as f64 * WIDTH as f64 * HEIGHT as f64;
     let step =
         (SAMPLE_RATE as f64 + (diff / (WIDTH as f64 * HEIGHT as f64 - 1.0)).floor()) as usize;
 
     assert!(step * (image_len - 1) + SAMPLE_RATE <= length);
 
-    // -- Threading -- //
+    // Threads init
     let workers = Arc::new(AtomicUsize::new(0));
     let (tx, rx) = mpsc::channel();
 
-
-    // -- Collector closure -- //
+    /*
+     * Collects computed RGB values for each pixel from a channel and generate the result image
+     */
     let image_maker = move || {
+        // -- RGB Data Collection -- //
         let mut image: RgbImage = ImageBuffer::new(WIDTH as u32, HEIGHT as u32);
         let start = Instant::now();
 
         for i in 0..image_len {
-            let data: (u32, Vec<f32>) = rx.recv().unwrap();
-            let max: f32 = data.1.iter().cloned().fold(0. / 0., f32::max);
+            let data: (u32, [u8; 3]) = rx.recv().unwrap();
 
-            print!("\rProcessing pixel : {}/{} {}\n", i,image_len,".");
+            print!("\rProcessing pixel : {}/{} {}\n", i, image_len, ".");
             stdout().flush().unwrap();
 
             // Place the pixel in the image
-            *image.get_pixel_mut(data.0 % HEIGHT as u32, data.0 / HEIGHT as u32) = image::Rgb(
-                data.1
-                    .iter()
-                    .map(|amp| (amp * 255.0 / max) as u8)
-                    .collect::<Vec<u8>>()
-                    .try_into()
-                    .unwrap(),
-            );
+            *image.get_pixel_mut(data.0 % HEIGHT as u32, data.0 / HEIGHT as u32) =
+                image::Rgb(data.1);
         }
 
+        // -- Image generation -- //
         image = imageops::resize(
             &image,
             FINAL_WIDTH,
@@ -102,7 +97,6 @@ fn threading(file_path: String) {
             imageops::FilterType::Lanczos3,
         );
 
-        // -- Generate image -- //
         let outpath = "output/".to_owned()
             + file_path
                 .split("/")
@@ -116,19 +110,16 @@ fn threading(file_path: String) {
             + "x"
             + HEIGHT.to_string().as_str()
             + ".png";
-
         image.save(outpath).unwrap();
 
         let elapsed = start.elapsed().as_secs();
-
         println!("Elapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
     };
 
     // -- Collector thread -- //
     let collector = thread::spawn(image_maker);
 
-    // -- Baby threads -- //
-    // let mut burrow = Vec::new();
+    // -- Computational threads -- //
     let num_workers = available_parallelism().unwrap().get();
     let mut pos = 0;
     while pos < image_len {
@@ -138,6 +129,9 @@ fn threading(file_path: String) {
             let tx = tx.clone();
             let s = signal.clone();
             let f = fft.clone();
+            /*
+             * Computes the FFT and the RGB value fr each pixel in a thread, then send it the the image maker
+             */
             thread::spawn(move || {
                 let amplitudes = fft_sliding_window(&s, pos, step, &f);
                 let colors = get_colors_from_max(amplitudes);
@@ -152,7 +146,20 @@ fn threading(file_path: String) {
     collector.join().unwrap();
 }
 
-fn get_colors_from_max(amplitudes: Vec<f32>) -> Vec<f32> {
+/// Returns the RGB value of a pixel from a set of frequencies amplitudes.
+/// - Low Frequencies maximum of amplitude is used for the red value
+/// - Medium frequencies maximum of amplitude is used for the green value
+/// - High frequencies maximum of amplitude is used for the blue value
+///
+/// # Arguments
+///  - amplitudes : Vec<f32>, A set of frequencies amplitudes
+///
+/// # Example
+///  
+/// ```
+/// let colors = get_colors_from_max(amplitudes);
+/// ```
+fn get_colors_from_max(amplitudes: Vec<f32>) -> [u8; 3] {
     let mut max = vec![amplitudes[20], amplitudes[250], amplitudes[4000]];
     for (freq, amp) in amplitudes.iter().take(SAMPLE_RATE / 2).enumerate() {
         match freq {
@@ -175,14 +182,35 @@ fn get_colors_from_max(amplitudes: Vec<f32>) -> Vec<f32> {
         }
     }
 
-    max
+    let max_value: f32 = max.iter().cloned().fold(0. / 0., f32::max);
+
+    max.iter()
+        .map(|amp| (amp * 255.0 / max_value) as u8)
+        .collect::<Vec<u8>>()
+        .try_into()
+        .unwrap()
 }
 
+/// Returns the FFT obtained on a slice of 44100 values of the signal. The starting point of the signal slice is define by the step and the pos.
+///
+/// # Arguments
+///  - signal: &Arc<Mutex<Vec<Complex<f32>>>>, The signal to process
+///  - pos: usize, The position of the pixel in the final image
+///  - step: usize, The step between each starting point of slices
+///  - fft: &Arc<dyn Fft<f32>>, The FFT instance used
+///
+/// # Example
+///  
+/// ```
+/// let s = signal.clone();
+/// let f = fft.clone();
+/// let colors = fft_sliding_window(&s, pos, step, &f);
+/// ```
 fn fft_sliding_window(
     signal: &Arc<Mutex<Vec<Complex<f32>>>>,
     pos: usize,
     step: usize,
-    fft: &std::sync::Arc<dyn Fft<f32>>,
+    fft: &Arc<dyn Fft<f32>>,
 ) -> Vec<f32> {
     let mut window = signal
         .lock()
