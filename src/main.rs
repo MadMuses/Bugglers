@@ -34,7 +34,7 @@ fn main() {
 
     // Get file name from args
     if args.len() < 2 {
-        panic!("File name is missing : \nTry cargo run file.txt")
+        panic!("File name is missing : \nTry cargo run {:?}","folder/file.txt")
     };
     let file_path = args[1].clone();
 
