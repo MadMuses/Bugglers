@@ -12,20 +12,51 @@ use std::{
     thread::{available_parallelism}
 };
 
+const VERSION: f32 = 1.0;
 const FINAL_WIDTH: u32 = 1024;
 const FINAL_HEIGHT: u32 = 1024;
 const WIDTH: usize = 480;
 const HEIGHT: usize = 480;
 const SAMPLE_RATE: usize = 40000;
 
-// fn gen_ui() -> String {
+fn gen_ui() -> String {
 
-// }
+    let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
+
+    // Define Header and footer
+    let mut header = format!("╗");
+    let mut footer = format!("\n╟");
+
+    // Define lines to print
+    let app_name = format!("\n║  Bugglers : V{}",VERSION);
+    let threads = format!("\n║  Using {:?} thread to generate a {}x{} image",nb_threads,FINAL_WIDTH,FINAL_HEIGHT);
+
+    // Get UI size (-2 to remove /n in String)
+    let ui_elem = vec![app_name,threads];
+    let ui_len = ui_elem.iter().map(|s| s.len()).max().unwrap() -2 ;
+
+    // Adapt header and footer
+    for _ in 0..ui_len{
+        header = "═".to_owned() + &header;
+        footer = footer + "─";
+    };
+
+    // Send combination of elements
+    ui_elem.into_iter().fold(
+        "\n\n╔".to_owned() + &header,
+        |mut acc, val| {
+            acc.push_str(&val);
+
+            // Adapt each element to match ui size
+            for _ in 0..(ui_len + 2 - val.len()){acc.push_str(" ");}
+            acc.push_str("  ║");
+            acc
+        },
+    ) + &footer + "╢\n"
+}
 
 
 fn main() {
-    // Print available threads
-    // let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
 
     // Collect args
     let args: Vec<String> = env::args().collect();
@@ -35,6 +66,8 @@ fn main() {
         panic!("File name is missing : \nTry cargo run {:?}","folder/file.txt")
     };
     let file_path = args[1].clone();
+
+    print!("{}",gen_ui());
 
     threading(file_path);
 }
@@ -81,7 +114,7 @@ fn threading(file_path: String) {
             let data: (u32, Vec<f32>) = rx.recv().unwrap();
             let max: f32 = data.1.iter().cloned().fold(0. / 0., f32::max);
 
-            print!("\rProcessing pixel : {}/{} {}\n", i,image_len,".");
+            print!("\r║  Processing pixel : {}/{}", i,image_len);
             stdout().flush().unwrap();
 
             // Place the pixel in the image
@@ -121,7 +154,7 @@ fn threading(file_path: String) {
 
         let elapsed = start.elapsed().as_secs();
 
-        println!("Elapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
+        println!("\nElapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
     };
 
     // -- Collector thread -- //
