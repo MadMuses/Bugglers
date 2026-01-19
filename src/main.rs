@@ -19,7 +19,7 @@ const WIDTH: usize = 480;
 const HEIGHT: usize = 480;
 const SAMPLE_RATE: usize = 40000;
 
-fn gen_ui() -> String {
+fn gen_ui() -> (String,usize) {
 
     let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
 
@@ -42,7 +42,7 @@ fn gen_ui() -> String {
     };
 
     // Send combination of elements
-    ui_elem.into_iter().fold(
+    (ui_elem.into_iter().fold(
         "\n\n╔".to_owned() + &header,
         |mut acc, val| {
             acc.push_str(&val);
@@ -52,9 +52,28 @@ fn gen_ui() -> String {
             acc.push_str("  ║");
             acc
         },
-    ) + &footer + "╢\n"
+    ) + &footer + "╢\n\n",ui_len)
 }
 
+
+fn gen_processing_ui(current: usize,total: usize,ui_len: usize) -> String{
+    let clear_line = format!("\r\x1b[1A");
+    let mut new_line = format!("║  Processing pixel : {}/{}", current,total);
+    for _ in 0..(ui_len + 2 - new_line.len() -1){new_line.push_str(" ");};
+    new_line.push_str("  ║\n╚");
+    for _ in 0..(new_line.len()-10){new_line.push_str("═");};
+    clear_line + &new_line + "╝"
+}
+
+fn gen_last_ui(start: Instant,ui_len: usize) -> String{
+    let elapsed = start.elapsed().as_secs();
+    let clear_line = format!("\r\x1b[1A");
+    let mut new_line = format!("║  Elapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
+    for _ in 0..(ui_len + 2 - new_line.len() -1){new_line.push_str(" ");};
+    new_line.push_str("  ║\n╚");
+    for _ in 0..(new_line.len()-10){new_line.push_str("═");};
+    clear_line + &new_line + "╝\n\n\n"
+}
 
 fn main() {
 
@@ -67,12 +86,15 @@ fn main() {
     };
     let file_path = args[1].clone();
 
-    print!("{}",gen_ui());
+    // Generate UI
+    let (ui,ui_len) = gen_ui();
+    print!("{}",ui);
 
-    threading(file_path);
+    // Start program
+    threading(file_path,ui_len);
 }
 
-fn threading(file_path: String) {
+fn threading(file_path: String, ui_len: usize) {
     // -- Common grounds -- //
 
     // Get the signal buffer
@@ -114,9 +136,8 @@ fn threading(file_path: String) {
             let data: (u32, Vec<f32>) = rx.recv().unwrap();
             let max: f32 = data.1.iter().cloned().fold(0. / 0., f32::max);
 
-            print!("\r║  Processing pixel : {}/{}", i,image_len);
+            print!("{}",gen_processing_ui(i,image_len,ui_len));
             stdout().flush().unwrap();
-
             // Place the pixel in the image
             *image.get_pixel_mut(data.0 % HEIGHT as u32, data.0 / HEIGHT as u32) = image::Rgb(
                 data.1
@@ -152,9 +173,7 @@ fn threading(file_path: String) {
 
         image.save(outpath).unwrap();
 
-        let elapsed = start.elapsed().as_secs();
-
-        println!("\nElapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
+        print!("{}",gen_last_ui(start,ui_len));
     };
 
     // -- Collector thread -- //
