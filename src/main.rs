@@ -16,8 +16,6 @@ use std::{
 const VERSION: f32 = 1.0;
 const FINAL_WIDTH: u32 = 1024;
 const FINAL_HEIGHT: u32 = 1024;
-const WIDTH: usize = 480;
-const HEIGHT: usize = 480;
 const SAMPLE_RATE: usize = 40000;
 
 fn gen_ui() -> String {
@@ -63,23 +61,53 @@ fn gen_ui() -> String {
 
 fn main() {
     // -- Arguments parsing -- //
-    let args: Vec<String> = env::args().collect();
+    let mut width: usize = 480;
+    let mut height: usize = 480;
+    let mut file_path = String::from("samples/miaou.wav");
 
-    // Get file name from args
-    if args.len() < 2 {
-        panic!(
-            "File name is missing : \nTry cargo run {:?}",
-            "folder/file.txt"
-        )
-    };
-    let file_path = args[1].clone();
+    let mut file = false;
+    let mut size = false;
+    let args: Vec<String> = env::args().skip(1).collect();
+    for (i, a) in args.iter().step_by(2).enumerate() {
+        match a.as_str() {
+            "-f" | "--file" => {
+                file_path = args[i * 2 + 1].clone();
+                file = true;
+            }
+            "-s" | "--size" => {
+                let result = args[i * 2 + 1].clone().parse::<usize>();
+
+                if result.is_ok() {
+                    width = result.unwrap();
+                    height = width.clone();
+                    size = true;
+                } else {
+                    println!("Wrong size value, generic 480x480 used");
+                }
+            }
+            _ => {
+                println!("Wrong argument: {}", a);
+            }
+        }
+    }
+
+    if !file {
+        println!(
+            "Generic audio sample 'miaou.wav' used, try 'cargo run -- -f some_file' to choose a specific file"
+        );
+    }
+    if !size {
+        println!(
+            "Generic 480x480 size value used, try 'cargo run -- -s some_size' to choose a specific size, for example '120'"
+        );
+    }
 
     print!("{}", gen_ui());
 
-    threading(file_path);
+    threading(file_path, width, height);
 }
 
-fn threading(file_path: String) {
+fn threading(file_path: String, width: usize, height: usize) {
     // -- Initialisation -- //
 
     // Signal buffer init
@@ -93,16 +121,16 @@ fn threading(file_path: String) {
     ));
 
     // Image init
-    let image_len = WIDTH * HEIGHT;
+    let image_len = width * height;
 
     // FFT init
     let mut planner = FftPlanner::new();
     let fft: Arc<dyn Fft<f32>> = planner.plan_fft_forward(SAMPLE_RATE);
 
     // Sliding window init
-    let diff = length as f64 - SAMPLE_RATE as f64 * WIDTH as f64 * HEIGHT as f64;
+    let diff = length as f64 - SAMPLE_RATE as f64 * width as f64 * height as f64;
     let step =
-        (SAMPLE_RATE as f64 + (diff / (WIDTH as f64 * HEIGHT as f64 - 1.0)).floor()) as usize;
+        (SAMPLE_RATE as f64 + (diff / (width as f64 * height as f64 - 1.0)).floor()) as usize;
 
     assert!(step * (image_len - 1) + SAMPLE_RATE <= length);
 
@@ -115,7 +143,7 @@ fn threading(file_path: String) {
      */
     let image_maker = move || {
         // -- RGB Data Collection -- //
-        let mut image: RgbImage = ImageBuffer::new(WIDTH as u32, HEIGHT as u32);
+        let mut image: RgbImage = ImageBuffer::new(width as u32, height as u32);
         let start = Instant::now();
 
         for i in 0..image_len {
@@ -125,7 +153,7 @@ fn threading(file_path: String) {
             stdout().flush().unwrap();
 
             // Place the pixel in the image
-            *image.get_pixel_mut(data.0 % HEIGHT as u32, data.0 / HEIGHT as u32) =
+            *image.get_pixel_mut(data.0 % height as u32, data.0 / height as u32) =
                 image::Rgb(data.1);
         }
 
@@ -146,9 +174,9 @@ fn threading(file_path: String) {
                 .next()
                 .unwrap()
             + "_"
-            + WIDTH.to_string().as_str()
+            + width.to_string().as_str()
             + "x"
-            + HEIGHT.to_string().as_str()
+            + height.to_string().as_str()
             + ".png";
         image.save(outpath).unwrap();
 
@@ -188,9 +216,9 @@ fn threading(file_path: String) {
 }
 
 /// Returns the RGB value of a pixel from a set of frequencies amplitudes.
-/// - Low Frequencies maximum of amplitude is used for the red value
-/// - Medium frequencies maximum of amplitude is used for the green value
-/// - High frequencies maximum of amplitude is used for the blue value
+/// - Low Frequencies (20-250Hz) maximum of amplitude is used for the red value
+/// - Medium frequencies (250-4000Hz) maximum of amplitude is used for the green value
+/// - High frequencies (4000-20000Hz) maximum of amplitude is used for the blue value
 ///
 /// # Arguments
 ///  - amplitudes : Vec<f32>, A set of frequencies amplitudes
@@ -232,7 +260,7 @@ fn get_colors_from_max(amplitudes: Vec<f32>) -> [u8; 3] {
         .unwrap()
 }
 
-/// Returns the FFT obtained on a slice of 44100 values of the signal. The starting point of the signal slice is define by the step and the pos.
+/// Returns the FFT obtained on a slice of 40000 values of the signal. The starting point of the signal slice is define by the step and the pos.
 ///
 /// # Arguments
 ///  - signal: &Arc<Mutex<Vec<Complex<f32>>>>, The signal to process
