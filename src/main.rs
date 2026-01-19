@@ -18,9 +18,10 @@ const WIDTH: usize = 480;
 const HEIGHT: usize = 480;
 const SAMPLE_RATE: usize = 40000;
 
-//TODO - Multithreading
-// Un thread qui collecte les messages et les places dans l'image
-// Autant de thread de possible qui font les FFT)
+// fn gen_ui() -> String {
+
+// }
+
 
 fn main() {
     // Print available threads
@@ -35,10 +36,14 @@ fn main() {
     };
     let file_path = args[1].clone();
 
+    threading(file_path);
+}
+
+fn threading(file_path: String) {
     // -- Common grounds -- //
 
     // Get the signal buffer
-    let mut reader = hound::WavReader::open(args[1].clone()).unwrap();
+    let mut reader = hound::WavReader::open(file_path.clone()).unwrap();
 
     let length = reader.len() as usize;
     let signal = Arc::new(Mutex::new(
