@@ -2,18 +2,15 @@ use hound;
 use image::{ImageBuffer, RgbImage, imageops};
 use num::complex::Complex;
 use rustfft::{Fft, FftPlanner};
-use std::env;
-use std::time::Instant;
 
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicUsize;
-// use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::mpsc;
-use std::thread;
-
-use std::thread::available_parallelism;
+use std::{
+    thread, env,
+    io::{stdout, Write},
+    time::{Instant},
+    sync::{Arc,Mutex,mpsc},
+    sync::atomic::{AtomicUsize,Ordering},
+    thread::{available_parallelism}
+};
 
 const FINAL_WIDTH: u32 = 1024;
 const FINAL_HEIGHT: u32 = 1024;
@@ -67,25 +64,20 @@ fn main() {
 
     // -- Threading -- //
     let workers = Arc::new(AtomicUsize::new(0));
-    // let collecting = Arc::new(AtomicBool::new(true));
-    // let collecting_doe = collecting.clone();
-
     let (tx, rx) = mpsc::channel();
 
-    // -- Closures -- //
+
+    // -- Collector closure -- //
     let image_maker = move || {
         let mut image: RgbImage = ImageBuffer::new(WIDTH as u32, HEIGHT as u32);
         let start = Instant::now();
-        // while collecting_doe.load(Ordering::Acquire) {
-        for _ in 0..image_len {
+
+        for i in 0..image_len {
             let data: (u32, Vec<f32>) = rx.recv().unwrap();
             let max: f32 = data.1.iter().cloned().fold(0. / 0., f32::max);
 
-            println!(
-                "Received: ({}, {})",
-                data.0 % HEIGHT as u32,
-                data.0 / HEIGHT as u32
-            );
+            print!("\rProcessing pixel : {}/{} {}\n", i,image_len,".");
+            stdout().flush().unwrap();
 
             // Place the pixel in the image
             *image.get_pixel_mut(data.0 % HEIGHT as u32, data.0 / HEIGHT as u32) = image::Rgb(
@@ -116,7 +108,7 @@ fn main() {
                 .unwrap()
             + "_"
             + WIDTH.to_string().as_str()
-            + "_"
+            + "x"
             + HEIGHT.to_string().as_str()
             + ".png";
 
@@ -127,9 +119,10 @@ fn main() {
         println!("Elapsed time:  {}m {}s", elapsed / 60, elapsed % 60);
     };
 
-    let doe = thread::spawn(image_maker);
+    // -- Collector thread -- //
+    let collector = thread::spawn(image_maker);
 
-    // Baby threads
+    // -- Baby threads -- //
     // let mut burrow = Vec::new();
     let num_workers = available_parallelism().unwrap().get();
     let mut pos = 0;
@@ -151,25 +144,7 @@ fn main() {
         }
     }
 
-    // for n in 0..num_workers {
-    //     let tx = tx.clone();
-    //     let collecting_bunbuns = collecting.clone();
-    //     let nb_threads_bunbun = nb_threads.clone();
-    //     let s = signal.clone();
-    //     let f = fft.clone();
-    //     burrow.push(thread::spawn(move || {
-    //         // -- Go to each pixel of the image -- //
-    //         for pos in n..(image_len as usize / nb_threads_bunbun.load(Ordering::Acquire) * n) {
-    //             let amplitudes = fft_sliding_window(&s, pos, step, &f);
-    //             let colors = get_colors_from_max(amplitudes);
-    //             tx.send((pos as u32, colors)).unwrap();
-    //         }
-    //         collecting_bunbuns.store(false, Ordering::Release);
-    //     }));
-    // }
-
-    // Doe thread
-    doe.join().unwrap();
+    collector.join().unwrap();
 }
 
 fn get_colors_from_max(amplitudes: Vec<f32>) -> Vec<f32> {
