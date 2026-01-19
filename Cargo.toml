@@ -8,3 +8,6 @@ hound = "3.5.1"
 image = "0.25.9"
 num = "0.4.3"
 rustfft = "6.4.1"
+
+[profile.dev]
+opt-level = 3
