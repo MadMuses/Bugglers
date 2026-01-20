@@ -61,6 +61,15 @@ fn gen_tips(tip_file: String, tip_size: String) -> String {
         + "╝\n\n"
 }
 
+
+/// Generate the header of the terminal UI. Return also the size used by the UI.
+///
+/// # Example
+///  
+/// ```
+/// let (ui, ui_len) = gen_ui();
+/// print!("{}",ui);
+/// ```
 fn gen_ui(file_path: String, width: usize, height: usize, warning_file: String, warning_size: String, err_size: String, err_file: String) -> (String, usize) {
     let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
 
@@ -127,6 +136,18 @@ fn gen_ui(file_path: String, width: usize, height: usize, warning_file: String, 
     )
 }
 
+/// Generate the body of the terminal UI displaying the progress of the script.
+///
+/// # Arguments
+///  - current: <usize>, The last generated pixel
+///  - total: <usize>, The total number of pixels
+///  - ui_len: <usize>, The size of the terminal UI
+///
+/// # Example
+///  
+/// ```
+/// print!("{}", gen_processing_ui(i, image_len, ui_len));
+/// ```
 fn gen_processing_ui(current: usize, total: usize, ui_len: usize) -> String {
     let clear_line = format!("\r\x1b[1A");
     let mut new_line = format!("║  Processing pixel : {}/{}", current, total);
@@ -140,6 +161,17 @@ fn gen_processing_ui(current: usize, total: usize, ui_len: usize) -> String {
     clear_line + &new_line + "╝"
 }
 
+/// Generate the body of the terminal UI displaying the elapsed time after the generation of the image.
+///
+/// # Arguments
+///  - start: <Instant>, The starting time of the script
+///  - ui_len: <usize>, The size of the terminal UI
+///
+/// # Example
+///  
+/// ```
+/// print!("{}", gen_last_ui(start, ui_len));
+/// ```
 fn gen_last_ui(start: Instant, ui_len: usize) -> String {
     let elapsed = start.elapsed().as_secs();
     let clear_line = format!("\r\x1b[1A");
@@ -154,68 +186,20 @@ fn gen_last_ui(start: Instant, ui_len: usize) -> String {
     clear_line + &new_line + "╝\n\n\n"
 }
 
-fn main() {
-    // -- Arguments parsing -- //
-    let mut width: usize = 480;
-    let mut height: usize = 480;
-    let mut file_path = String::from("samples/miaou.wav");
-
-    let mut file = false;
-    let mut size = false;
-    let mut err_file = format!("");
-    let mut err_size = format!("");
-    let args: Vec<String> = env::args().skip(1).collect();
-    for (i, a) in args.iter().step_by(2).enumerate() {
-        match a.as_str() {
-            "-f" | "--file" => {
-                file_path = args[i * 2 + 1].clone();
-                file = true;
-            }
-            "-s" | "--size" => {
-                let result = args[i * 2 + 1].clone().parse::<usize>();
-
-                if result.is_ok() {
-                    width = result.unwrap();
-                    height = width.clone();
-                    size = true;
-                } else {
-                    err_size = format!("Wrong size value, generic 480x480 used");
-                }
-            }
-            _ => {
-                err_file = format!("Wrong argument: {}", a);
-            }
-        }
-    }
-
-    let mut warning_file = format!("");
-    let mut warning_size = format!("");
-    let mut tip_file = format!("");
-    let mut tip_size = format!("");
-
-    if !file {
-        warning_file = format!("Default audio sample 'miaou.wav' used");
-        tip_file = format!("try 'cargo run -- -f some_file' to choose a specific file");
-    }
-    if !size {
-        warning_size = format!("Default 480x480 size value used");
-        tip_size = format!(
-            "try 'cargo run -- -s some_size' to choose a specific size, for example '120'"
-        );
-    }
-
-    // Generate UI
-    let (ui, ui_len) = gen_ui(file_path.clone(), width, height,warning_file,warning_size,err_file,err_size);
-    print!("{}", ui);
-
-    // Start program
-    threading(file_path, width, height, ui_len);
-
-    print!("{}", gen_tips(tip_file,tip_size));
-}
-
+/// Create threads to optimize the computation of FFTs and the generation of the image.
+///
+/// # Arguments
+///  - file_path: <String>, The file path of the audio file to open
+///  - width, height: <usize>, The resolution of the generated image
+///  - ui_len: <usize>, The size of the terminal UI
+///
+/// # Example
+///  
+/// ```
+/// threading(file_path, width, height, ui_len);
+/// ```
 fn threading(file_path: String, width: usize, height: usize, ui_len: usize) {
-    // -- Common grounds -- //
+    // -- Initialisation -- //
 
     // Signal buffer init
     let mut reader = hound::WavReader::open(file_path.clone()).unwrap();
@@ -258,6 +242,7 @@ fn threading(file_path: String, width: usize, height: usize, ui_len: usize) {
 
             print!("{}", gen_processing_ui(i, image_len, ui_len));
             stdout().flush().unwrap();
+
             // Place the pixel in the image
             *image.get_pixel_mut(data.0 % height as u32, data.0 / height as u32) =
                 image::Rgb(data.1);
@@ -333,6 +318,7 @@ fn threading(file_path: String, width: usize, height: usize, ui_len: usize) {
 /// let colors = get_colors_from_max(amplitudes);
 /// ```
 fn get_colors_from_max(amplitudes: Vec<f32>) -> [u8; 3] {
+    // Collect maximum of amplitudes
     let mut max = vec![amplitudes[20], amplitudes[250], amplitudes[4000]];
     for (freq, amp) in amplitudes.iter().take(SAMPLE_RATE / 2).enumerate() {
         match freq {
@@ -355,8 +341,8 @@ fn get_colors_from_max(amplitudes: Vec<f32>) -> [u8; 3] {
         }
     }
 
+    // Convert max imum of amplitudes to RGB values
     let max_value: f32 = max.iter().cloned().fold(0. / 0., f32::max);
-
     max.iter()
         .map(|amp| (amp * 255.0 / max_value) as u8)
         .collect::<Vec<u8>>()
@@ -385,6 +371,7 @@ fn fft_sliding_window(
     step: usize,
     fft: &Arc<dyn Fft<f32>>,
 ) -> Vec<f32> {
+    // Slice the signal
     let mut window = signal
         .lock()
         .unwrap()
@@ -393,9 +380,70 @@ fn fft_sliding_window(
         .take(SAMPLE_RATE)
         .cloned()
         .collect::<Vec<_>>();
+
     // Apply fft in this slice
     fft.process(&mut window);
     let amplitudes: Vec<f32> = window.iter().map(|c| c.norm()).collect();
 
     amplitudes
+}
+
+fn main() {
+    // -- Arguments parsing -- //
+    let mut width: usize = 480;
+    let mut height: usize = 480;
+    let mut file_path = String::from("samples/miaou.wav");
+
+    let mut file = false;
+    let mut size = false;
+    let mut err_file = format!("");
+    let mut err_size = format!("");
+    let args: Vec<String> = env::args().skip(1).collect();
+    for (i, a) in args.iter().step_by(2).enumerate() {
+        match a.as_str() {
+            "-f" | "--file" => {
+                file_path = args[i * 2 + 1].clone();
+                file = true;
+            }
+            "-s" | "--size" => {
+                let result = args[i * 2 + 1].clone().parse::<usize>();
+
+                if result.is_ok() {
+                    width = result.unwrap();
+                    height = width.clone();
+                    size = true;
+                } else {
+                    err_size = format!("Wrong size value, generic 480x480 used");
+                }
+            }
+            _ => {
+                err_file = format!("Wrong argument: {}", a);
+            }
+        }
+    }
+
+    let mut warning_file = format!("");
+    let mut warning_size = format!("");
+    let mut tip_file = format!("");
+    let mut tip_size = format!("");
+
+    if !file {
+        warning_file = format!("Default audio sample 'miaou.wav' used");
+        tip_file = format!("try 'cargo run -- -f some_file' to choose a specific file");
+    }
+    if !size {
+        warning_size = format!("Default 480x480 size value used");
+        tip_size = format!(
+            "try 'cargo run -- -s some_size' to choose a specific size, for example '120'"
+        );
+    }
+
+    // Generate UI
+    let (ui, ui_len) = gen_ui(file_path.clone(), width, height,warning_file,warning_size,err_file,err_size);
+    print!("{}", ui);
+
+    // Start program
+    threading(file_path, width, height, ui_len);
+
+    print!("{}", gen_tips(tip_file,tip_size));
 }
