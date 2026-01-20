@@ -19,6 +19,17 @@ const FINAL_WIDTH: u32 = 1024;
 const FINAL_HEIGHT: u32 = 1024;
 const SAMPLE_RATE: usize = 40000;
 
+/// Generate the body of the tips UI displaying tips on how to use the script
+///
+/// # Arguments
+///  - tip_file: <String>, Tips concerning files
+///  - tip_size: <String>, Tips concerning size
+///
+/// # Example
+///  
+/// ```
+/// print!("{}", gen_tips(i, tip_file, tip_size));
+/// ```
 fn gen_tips(tip_file: String, tip_size: String) -> String {
 
     // Define Header and footer
@@ -64,13 +75,22 @@ fn gen_tips(tip_file: String, tip_size: String) -> String {
 
 /// Generate the header of the terminal UI. Return also the size used by the UI.
 ///
+/// # Arguments
+///  - file_path: <String> Path to the file used
+///  - width: <usize> Image width
+///  - height: <usize> Image height
+///  - warning_file: <String> Warning about files
+///  - warning_size: <String> Warning about size
+///  - err_file: <String> Error about files
+///  - err_size: <String> Error about size
+///
 /// # Example
 ///  
 /// ```
-/// let (ui, ui_len) = gen_ui();
-/// print!("{}",ui);
+/// let (ui, ui_len) = gen_ui(file_path, width, height,warning_file,warning_size,err_file,err_size);
+/// print!("{}", ui);
 /// ```
-fn gen_ui(file_path: String, width: usize, height: usize, warning_file: String, warning_size: String, err_size: String, err_file: String) -> (String, usize) {
+fn gen_ui(file_path: String, width: usize, height: usize, warning_file: String, warning_size: String, err_file: String,err_size: String) -> (String, usize) {
     let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
 
     // Define Header and footer
