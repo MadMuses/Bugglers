@@ -11,6 +11,7 @@ use std::{
     thread,
     thread::available_parallelism,
     time::Instant,
+    cmp::max
 };
 
 const VERSION: f32 = 1.0;
@@ -18,7 +19,49 @@ const FINAL_WIDTH: u32 = 1024;
 const FINAL_HEIGHT: u32 = 1024;
 const SAMPLE_RATE: usize = 40000;
 
-fn gen_ui() -> (String, usize) {
+fn gen_tips(tip_file: String, tip_size: String) -> String {
+
+    // Define Header and footer
+    let mut header = format!("╗");
+    let mut footer = format!("\n╚");
+
+    let mut ui_elem= vec![];
+
+    if tip_file != "" || tip_size != "" {
+        ui_elem.push(format!("\n║  Tips : "));
+        if tip_file != "" {ui_elem.push(format!("\n║    {}",tip_file));}
+        if tip_size != "" {ui_elem.push(format!("\n║    {}",tip_size));}
+        ui_elem.push(format!("\n║  "));
+    } else {
+        return format!("")
+    }
+
+    let ui_len = ui_elem.iter().map(|s| s.len()).max().unwrap() - 2;
+
+    // Adapt header and footer
+    for _ in 0..ui_len {
+        header = "═".to_owned() + &header;
+        footer = footer + "═";
+    }
+
+    
+    ui_elem
+        .into_iter()
+        .fold("╔".to_owned() + &header, |mut acc, val| {
+            acc.push_str(&val);
+
+            // Adapt each element to match ui size
+            for _ in 0..(ui_len + 2 - val.len()) {
+                acc.push_str(" ");
+            }
+            acc.push_str("  ║");
+            acc
+        })
+        + &footer
+        + "╝\n\n"
+}
+
+fn gen_ui(file_path: String, width: usize, height: usize, warning_file: String, warning_size: String, err_size: String, err_file: String) -> (String, usize) {
     let nb_threads = Arc::new(AtomicUsize::new(available_parallelism().unwrap().get()));
 
     // Define Header and footer
@@ -26,15 +69,37 @@ fn gen_ui() -> (String, usize) {
     let mut footer = format!("\n╟");
 
     // Define lines to print
-    let app_name = format!("\n║  Bugglers : V{}", VERSION);
-    let threads = format!(
-        "\n║  Using {:?} thread to generate a {}x{} image",
-        nb_threads, FINAL_WIDTH, FINAL_HEIGHT
-    );
+    let app_name =  format!("\n║  Bugglers v{}", VERSION);
+    let threads =   format!("\n║  Using {:?} threads", nb_threads);
+    let img_size =  format!("\n║  Image Size : {}x{} pixels", width, height);
+    let file =      format!("\n║  File used : {}",file_path);
+    let spacer = format!("\n║  ");
+
+    let blank_process = format!("║  Processing pixel : {}/{}  ║",width*height,width*height);
 
     // Get UI size (-2 to remove /n in String)
-    let ui_elem = vec![app_name, threads];
-    let ui_len = ui_elem.iter().map(|s| s.len()).max().unwrap() - 2;
+    let mut ui_elem = vec![app_name, threads,format!("\n║  "),img_size,file];
+
+    // Add warnings if they happened
+    if warning_file != "" || warning_size != "" {
+        ui_elem.push(format!("\n║  "));
+        ui_elem.push(format!("\n║  Warning(s) :"));
+        if warning_file != "" {ui_elem.push(format!("\n║    {}",warning_file));}
+        if warning_size != "" {ui_elem.push(format!("\n║    {}",warning_size));}
+    }
+
+    // Add errors if they happened
+    if err_file != "" || err_size != "" {
+        ui_elem.push(format!("\n║  "));
+        ui_elem.push(format!("\n║  Error(s) :"));
+        if err_file != "" {ui_elem.push(format!("\n║    {}",err_file));}
+        if err_size != "" {ui_elem.push(format!("\n║    {}",err_size));}
+    }
+
+    // Add last spacer
+    ui_elem.push(spacer);
+
+    let ui_len = ui_elem.iter().map(|s| max(s.len(),blank_process.len())).max().unwrap() - 2;
 
     // Adapt header and footer
     for _ in 0..ui_len {
@@ -97,6 +162,8 @@ fn main() {
 
     let mut file = false;
     let mut size = false;
+    let mut err_file = format!("");
+    let mut err_size = format!("");
     let args: Vec<String> = env::args().skip(1).collect();
     for (i, a) in args.iter().step_by(2).enumerate() {
         match a.as_str() {
@@ -112,32 +179,39 @@ fn main() {
                     height = width.clone();
                     size = true;
                 } else {
-                    println!("Wrong size value, generic 480x480 used");
+                    err_size = format!("Wrong size value, generic 480x480 used");
                 }
             }
             _ => {
-                println!("Wrong argument: {}", a);
+                err_file = format!("Wrong argument: {}", a);
             }
         }
     }
 
+    let mut warning_file = format!("");
+    let mut warning_size = format!("");
+    let mut tip_file = format!("");
+    let mut tip_size = format!("");
+
     if !file {
-        println!(
-            "Generic audio sample 'miaou.wav' used, try 'cargo run -- -f some_file' to choose a specific file"
-        );
+        warning_file = format!("Default audio sample 'miaou.wav' used");
+        tip_file = format!("try 'cargo run -- -f some_file' to choose a specific file");
     }
     if !size {
-        println!(
-            "Generic 480x480 size value used, try 'cargo run -- -s some_size' to choose a specific size, for example '120'"
+        warning_size = format!("Default 480x480 size value used");
+        tip_size = format!(
+            "try 'cargo run -- -s some_size' to choose a specific size, for example '120'"
         );
     }
 
     // Generate UI
-    let (ui, ui_len) = gen_ui();
+    let (ui, ui_len) = gen_ui(file_path.clone(), width, height,warning_file,warning_size,err_file,err_size);
     print!("{}", ui);
 
     // Start program
     threading(file_path, width, height, ui_len);
+
+    print!("{}", gen_tips(tip_file,tip_size));
 }
 
 fn threading(file_path: String, width: usize, height: usize, ui_len: usize) {
