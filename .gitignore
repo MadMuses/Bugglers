@@ -2,3 +2,4 @@
 /output
 Cargo.lock
 /samples
+!/output/.gitkeep
